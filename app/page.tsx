@@ -20,10 +20,13 @@ export default function Home() {
   const [friendError, setFriendError] = useState("");
   const [friends, setFriends] = useState<PublicUser[]>([]);
   const [friendRequests, setFriendRequests] = useState<PublicUser[]>([]);
+  const [unreadByPeer, setUnreadByPeer] = useState<Record<string, number>>({});
   const [messagesOpen, setMessagesOpen] = useState(false);
   const [showFriendList, setShowFriendList] = useState(true);
   const [activeChatPeerId, setActiveChatPeerId] = useState("");
   const currentUserRef = useRef<PublicUser | null>(null);
+  const knownMessageIds = useRef<Set<string>>(new Set());
+  const notificationBaselines = useRef<Set<string>>(new Set());
   const requestVersion = useRef(0);
   const cities = useKingdomStore((state) => state.cities);
   const activeCity = useKingdomStore((state) => state.activeCity);
@@ -96,12 +99,16 @@ export default function Home() {
   const selectedPeerId = selectedCity?.registeredProfile?.userId ?? "";
   const activeChatPeer = friends.find((friend) => friend.id === activeChatPeerId) ?? null;
   const chatPeerId = messagesOpen ? activeChatPeerId : selectedPeerId;
+  const notificationCount = friendRequests.length + Object.values(unreadByPeer).reduce((total, count) => total + count, 0);
 
   const loadFriends = useCallback(async () => {
     if (!currentUser) {
       setFriends([]);
       setFriendRequests([]);
       setActiveChatPeerId("");
+      setUnreadByPeer({});
+      knownMessageIds.current.clear();
+      notificationBaselines.current.clear();
       return;
     }
     const response = await fetch("/api/friends");
@@ -119,7 +126,7 @@ export default function Home() {
     void loadFriends();
   }, [loadFriends]);
 
-  const loadConversation = useCallback(async (peerId: string) => {
+  const loadConversation = useCallback(async (peerId: string, markAsRead = false) => {
     if (!peerId || !currentUser) return;
     setChatError("");
     try {
@@ -130,7 +137,12 @@ export default function Home() {
         setChatError(data.error ?? "Could not load chat.");
         return;
       }
-      setChatMessages(data.messages ?? []);
+      const messages = (data.messages ?? []) as ChatMessage[];
+      messages.forEach((message) => knownMessageIds.current.add(message.id));
+      setChatMessages(messages);
+      if (markAsRead) {
+        setUnreadByPeer((counts) => ({ ...counts, [peerId]: 0 }));
+      }
     } catch {
       setChatMessages([]);
       setChatError("Could not load chat.");
@@ -150,15 +162,64 @@ export default function Home() {
             ? data.status
             : "none";
           setFriendStatus(status);
-          if (status === "friends") void loadConversation(selectedPeerId);
+          if (status === "friends") void loadConversation(selectedPeerId, false);
         })
         .catch(() => setFriendStatus("none"));
     }
   }, [currentUser?.id, loadConversation, selectedPeerId]);
 
   useEffect(() => {
-    if (messagesOpen && activeChatPeerId) void loadConversation(activeChatPeerId);
+    if (messagesOpen && activeChatPeerId) void loadConversation(activeChatPeerId, true);
   }, [activeChatPeerId, loadConversation, messagesOpen]);
+
+  useEffect(() => {
+    if (!currentUser || !friends.length) return;
+
+    let cancelled = false;
+    async function refreshNotifications() {
+      await Promise.all(
+        friends.map(async (friend) => {
+          try {
+            const response = await fetch(`/api/chat?peerId=${encodeURIComponent(friend.id)}`);
+            if (!response.ok) return;
+            const data = await response.json();
+            if (cancelled) return;
+            const messages = (data.messages ?? []) as ChatMessage[];
+            if (!notificationBaselines.current.has(friend.id)) {
+              messages.forEach((message) => knownMessageIds.current.add(message.id));
+              notificationBaselines.current.add(friend.id);
+              return;
+            }
+            const incomingNew = messages.filter(
+              (message) =>
+                message.senderId === friend.id &&
+                !knownMessageIds.current.has(message.id)
+            );
+            messages.forEach((message) => knownMessageIds.current.add(message.id));
+            if (!incomingNew.length) return;
+            if (messagesOpen && activeChatPeerId === friend.id) {
+              setChatMessages(messages);
+              setUnreadByPeer((counts) => ({ ...counts, [friend.id]: 0 }));
+              return;
+            }
+            setUnreadByPeer((counts) => ({
+              ...counts,
+              [friend.id]: (counts[friend.id] ?? 0) + incomingNew.length
+            }));
+          } catch {
+            // Notification refresh is best-effort.
+          }
+        })
+      );
+    }
+
+    void refreshNotifications();
+    const interval = window.setInterval(refreshNotifications, 12000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [activeChatPeerId, currentUser, friends, messagesOpen]);
 
   async function sendChat(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -174,6 +235,7 @@ export default function Home() {
       setChatError(data.error ?? "Could not send message.");
       return;
     }
+    knownMessageIds.current.add(data.message.id);
     setChatDraft("");
     setChatMessages((messages) => [...messages, data.message]);
   }
@@ -210,6 +272,7 @@ export default function Home() {
     setFriendStatus(data.status ?? "friends");
     await loadFriends();
     setActiveChatPeerId(friendId);
+    setUnreadByPeer((counts) => ({ ...counts, [friendId]: 0 }));
     setMessagesOpen(true);
   }
 
@@ -266,9 +329,9 @@ export default function Home() {
           >
             <MessageCircle className="h-4 w-4 text-aqua" />
             <span className="hidden sm:inline">Messages</span>
-            {friendRequests.length > 0 && (
+            {notificationCount > 0 && (
               <span className="rounded-full bg-copper px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                {friendRequests.length}
+                {notificationCount > 99 ? "99+" : notificationCount}
               </span>
             )}
           </button>
@@ -279,11 +342,11 @@ export default function Home() {
 
       {messagesOpen && (
         <div className="pointer-events-auto fixed inset-0 z-30 grid place-items-center bg-black/45 p-2 sm:p-4">
-          <div className="glass-panel flex max-h-[92dvh] w-full max-w-3xl flex-col overflow-hidden rounded-lg">
-            <div className="flex items-center justify-between border-b border-white/10 p-4">
+          <div className="glass-panel flex h-[88dvh] w-full max-w-3xl flex-col overflow-hidden rounded-lg sm:h-[42rem] sm:max-h-[92dvh]">
+            <div className="flex shrink-0 items-center justify-between border-b border-white/10 p-3 sm:p-4">
               <div>
                 <h2 className="text-lg font-semibold">Messages</h2>
-                <p className="text-xs text-stone-400">Only accepted friends can message each other.</p>
+                <p className="text-xs text-stone-400">Friend requests and unread chats appear here.</p>
               </div>
               <button onClick={() => setMessagesOpen(false)} className="hud-button" aria-label="Close messages">
                 <X className="h-4 w-4" />
@@ -292,7 +355,7 @@ export default function Home() {
             {!currentUser ? (
               <div className="p-4 text-sm text-stone-300">Sign in or create a profile to view friends and messages.</div>
             ) : (
-              <div className="grid min-h-0 flex-1 md:grid-cols-[18rem_1fr]">
+              <div className="grid min-h-0 flex-1 grid-rows-[minmax(9rem,14rem)_1fr] md:grid-cols-[18rem_1fr] md:grid-rows-none">
                 <div className="min-h-0 overflow-auto border-b border-white/10 p-3 md:border-b-0 md:border-r">
                   <button
                     onClick={() => setShowFriendList((value) => !value)}
@@ -324,14 +387,24 @@ export default function Home() {
                       {friends.length ? friends.map((friend) => (
                         <button
                           key={friend.id}
-                          onClick={() => setActiveChatPeerId(friend.id)}
+                          onClick={() => {
+                            setActiveChatPeerId(friend.id);
+                            setUnreadByPeer((counts) => ({ ...counts, [friend.id]: 0 }));
+                          }}
                           className={`mb-2 w-full rounded-md border p-2 text-left transition ${
                             activeChatPeerId === friend.id
                               ? "border-copper/80 bg-copper/20"
                               : "border-white/10 bg-white/[0.04] hover:bg-white/[0.09]"
                           }`}
                         >
-                          <span className="block truncate text-sm font-medium">{friendName(friend)}</span>
+                          <span className="flex items-center justify-between gap-2">
+                            <span className="min-w-0 truncate text-sm font-medium">{friendName(friend)}</span>
+                            {(unreadByPeer[friend.id] ?? 0) > 0 && (
+                              <span className="shrink-0 rounded-full bg-copper px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                                {unreadByPeer[friend.id] > 9 ? "9+" : unreadByPeer[friend.id]}
+                              </span>
+                            )}
+                          </span>
                           <span className="block truncate text-xs text-aqua">@{friend.profile.githubUsername}</span>
                         </button>
                       )) : (
@@ -343,10 +416,10 @@ export default function Home() {
                   )}
                   {friendError && <p className="mt-2 text-xs text-red-200">{friendError}</p>}
                 </div>
-                <div className="flex min-h-[22rem] flex-col p-4">
+                <div className="flex min-h-0 flex-col p-3 sm:p-4">
                   {activeChatPeer ? (
                     <>
-                      <div className="border-b border-white/10 pb-3">
+                      <div className="shrink-0 border-b border-white/10 pb-3">
                         <p className="text-xs uppercase text-stone-400">Chatting with</p>
                         <h3 className="text-lg font-semibold">{friendName(activeChatPeer)}</h3>
                         <p className="text-sm text-aqua">@{activeChatPeer.profile.githubUsername}</p>
@@ -367,7 +440,7 @@ export default function Home() {
                           <p className="text-sm text-stone-400">No messages yet.</p>
                         )}
                       </div>
-                      <form onSubmit={sendChat} className="flex gap-2 border-t border-white/10 pt-3">
+                      <form onSubmit={sendChat} className="flex shrink-0 gap-2 border-t border-white/10 pt-3">
                         <input
                           value={chatDraft}
                           onChange={(event) => setChatDraft(event.target.value)}
@@ -442,15 +515,15 @@ export default function Home() {
             key={active?.login ?? "loading"}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="glass-panel pointer-events-auto max-h-[38dvh] w-full min-w-0 overflow-auto rounded-lg p-3 sm:max-h-[72dvh] sm:max-w-sm sm:p-4"
+            className="glass-panel pointer-events-auto max-h-[28dvh] w-full min-w-0 overflow-auto rounded-lg p-2 sm:max-h-[72dvh] sm:max-w-sm sm:p-4"
           >
             {selectedRepo ? (
               <>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-xs uppercase text-stone-400">Repository building</p>
-                    <h2 className="mt-1 break-words text-lg font-semibold">{selectedRepo.name}</h2>
-                    <p className="mt-1 text-sm text-aqua">{selectedRepo.language ?? "Mixed stack"}</p>
+                    <h2 className="mt-1 break-words text-base font-semibold sm:text-lg">{selectedRepo.name}</h2>
+                    <p className="mt-0.5 text-xs text-aqua sm:mt-1 sm:text-sm">{selectedRepo.language ?? "Mixed stack"}</p>
                   </div>
                   <button
                     onClick={() => setSelectedRepo(null)}
@@ -461,24 +534,24 @@ export default function Home() {
                     <X className="h-4 w-4" />
                   </button>
                 </div>
-                <p className="mt-3 text-sm leading-5 text-stone-300">
+                <p className="mt-2 line-clamp-2 text-xs leading-5 text-stone-300 sm:mt-3 sm:line-clamp-none sm:text-sm">
                   {selectedRepo.description ?? "No repository description is available on GitHub."}
                 </p>
-                <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-stone-300 sm:grid-cols-3">
+                <div className="mt-2 grid grid-cols-3 gap-1.5 text-[11px] text-stone-300 sm:mt-3 sm:gap-2 sm:text-xs">
                   <span className="min-w-0 truncate rounded border border-white/10 bg-white/[0.04] px-2 py-1">
                     {selectedRepo.language ?? "Mixed"}
                   </span>
                   <span className="flex min-w-0 items-center gap-1 rounded border border-white/10 bg-white/[0.04] px-2 py-1"><Star className="h-3.5 w-3.5 shrink-0 text-[#e5b14c]" /> {selectedRepo.stars.toLocaleString()}</span>
                   <span className="flex min-w-0 items-center gap-1 rounded border border-white/10 bg-white/[0.04] px-2 py-1"><GitFork className="h-3.5 w-3.5 shrink-0 text-aqua" /> {selectedRepo.forks.toLocaleString()}</span>
                 </div>
-                <p className="mt-3 rounded-md border border-white/10 bg-white/[0.04] px-3 py-2 text-xs leading-5 text-stone-300">
+                <p className="mt-3 hidden rounded-md border border-white/10 bg-white/[0.04] px-3 py-2 text-xs leading-5 text-stone-300 sm:block">
                   Building height follows stars. Color shows the main language. Click a building to inspect the repo here.
                 </p>
                 <a
                   href={selectedRepo.htmlUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="mt-4 flex w-full items-center justify-center gap-2 rounded-md bg-copper px-4 py-2 text-sm font-medium text-white transition hover:bg-[#e38a46]"
+                  className="mt-2 flex w-full items-center justify-center gap-2 rounded-md bg-copper px-3 py-1.5 text-xs font-medium text-white transition hover:bg-[#e38a46] sm:mt-4 sm:px-4 sm:py-2 sm:text-sm"
                 >
                   <Github className="h-4 w-4" /> Open repository <ExternalLink className="h-3.5 w-3.5" />
                 </a>
@@ -488,10 +561,10 @@ export default function Home() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-xs uppercase text-stone-400">City hall profile</p>
-                    <h2 className="mt-1 break-words text-lg font-semibold sm:text-xl">
+                    <h2 className="mt-1 break-words text-base font-semibold sm:text-xl">
                       {selectedCity.registeredProfile?.displayName ?? selectedCity.name}
                     </h2>
-                    <p className="break-words text-sm text-aqua">@{selectedCity.login}</p>
+                    <p className="break-words text-xs text-aqua sm:text-sm">@{selectedCity.login}</p>
                   </div>
                   <a
                     href={selectedCity.htmlUrl}
@@ -504,12 +577,12 @@ export default function Home() {
                     <Github className="h-4 w-4" />
                   </a>
                 </div>
-                <p className="mt-3 text-sm leading-5 text-stone-300">
+                <p className="mt-2 line-clamp-2 text-xs leading-5 text-stone-300 sm:mt-3 sm:line-clamp-none sm:text-sm">
                   {selectedCity.registeredProfile?.bio ||
                     selectedCity.bio ||
                     "This city is generated from a public GitHub profile. Registered users can add portfolio and coding links."}
                 </p>
-                <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-stone-300 sm:grid-cols-2">
+                <div className="mt-2 grid grid-cols-2 gap-1.5 text-[11px] text-stone-300 sm:mt-3 sm:gap-2 sm:text-xs">
                   <span className="flex min-w-0 items-center gap-1 rounded border border-white/10 bg-white/[0.04] px-2 py-1">
                     <Building2 className="h-3.5 w-3.5 shrink-0 text-copper" /> {selectedCity.publicRepos.toLocaleString()} repos
                   </span>
@@ -523,7 +596,7 @@ export default function Home() {
                   )}
                 </div>
                 {selectedCity.registeredProfile ? (
-                  <div className="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+                  <div className="mt-2 grid grid-cols-2 gap-1.5 text-[11px] sm:mt-3 sm:gap-2 sm:text-xs">
                     <ProfileLink href={selectedCity.registeredProfile.portfolioUrl} icon={<Globe className="h-3.5 w-3.5" />} label="Portfolio" />
                     <ProfileLink href={selectedCity.registeredProfile.linkedinUrl} icon={<Linkedin className="h-3.5 w-3.5" />} label="LinkedIn" />
                     <ProfileLink href={selectedCity.registeredProfile.leetcodeUrl} icon={<Trophy className="h-3.5 w-3.5" />} label="LeetCode" />
@@ -534,7 +607,7 @@ export default function Home() {
                     No DevVerse profile is linked to this GitHub user yet. Registered profiles are stored in PostgreSQL when `DATABASE_URL` is configured.
                   </p>
                 )}
-                <p className="mt-3 break-words border-t border-white/10 pt-3 text-xs text-stone-400">
+                <p className="mt-2 break-words border-t border-white/10 pt-2 text-[11px] text-stone-400 sm:mt-3 sm:pt-3 sm:text-xs">
                   Top stack: {selectedCity.topLanguages.join(" / ") || "Mixed stack"}
                 </p>
                 {currentUser && selectedCity.registeredProfile && selectedCity.registeredProfile.userId !== currentUser.id && (
@@ -562,7 +635,7 @@ export default function Home() {
                     {friendError && <p className="mt-2 text-xs text-red-200">{friendError}</p>}
                   </div>
                 )}
-                <div className="mt-3 rounded-md border border-white/10 bg-white/[0.04] p-3">
+                <div className="mt-3 hidden rounded-md border border-white/10 bg-white/[0.04] p-3 sm:block">
                   <div className="mb-2 flex items-center gap-2 text-xs uppercase text-stone-400">
                     <MessageCircle className="h-3.5 w-3.5 text-aqua" />
                     Chat
@@ -619,8 +692,8 @@ export default function Home() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <p className="text-xs uppercase text-stone-400">Selected city</p>
-                    <h2 className="mt-1 break-words text-lg font-semibold sm:text-xl">{active.name}</h2>
-                    <p className="break-words text-sm text-aqua">@{active.login}</p>
+                    <h2 className="mt-1 break-words text-base font-semibold sm:text-xl">{active.name}</h2>
+                    <p className="break-words text-xs text-aqua sm:text-sm">@{active.login}</p>
                   </div>
                   <a
                     href={active.htmlUrl}
@@ -633,16 +706,16 @@ export default function Home() {
                     <Github className="h-4 w-4" />
                   </a>
                 </div>
-                <p className="mt-3 line-clamp-2 text-sm leading-5 text-stone-300">
+                <p className="mt-2 line-clamp-2 text-xs leading-5 text-stone-300 sm:mt-3 sm:text-sm">
                   {active.bio ?? "This public GitHub city is generated from repositories and languages."}
                 </p>
-                <div className="mt-3 flex flex-wrap gap-2 text-xs text-stone-300">
+                <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-stone-300 sm:mt-3 sm:gap-2 sm:text-xs">
                   <span className="flex items-center gap-1 rounded border border-white/10 bg-white/[0.04] px-2 py-1">
                     <Building2 className="h-3.5 w-3.5 shrink-0 text-copper" /> {active.publicRepos} repos
                   </span>
                   <span className="rounded border border-white/10 bg-white/[0.04] px-2 py-1">{active.followers.toLocaleString()} followers</span>
                 </div>
-                <p className="mt-3 break-words border-t border-white/10 pt-3 text-xs text-stone-400">
+                <p className="mt-2 break-words border-t border-white/10 pt-2 text-[11px] text-stone-400 sm:mt-3 sm:pt-3 sm:text-xs">
                   Inspecting: {selected}
                 </p>
               </>
