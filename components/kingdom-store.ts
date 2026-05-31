@@ -8,6 +8,8 @@ type KingdomState = {
   selectedRepo: GitHubRepo | null;
   selectedCity: DeveloperCity | null;
   mobileMove: { x: number; z: number; running: boolean };
+  cameraYawOffset: number;
+  playerPosition: { x: number; z: number };
   isLoading: boolean;
   error: string | null;
   setCities: (cities: DeveloperCity[]) => void;
@@ -16,6 +18,8 @@ type KingdomState = {
   setSelectedRepo: (selectedRepo: GitHubRepo | null) => void;
   setSelectedCity: (selectedCity: DeveloperCity | null) => void;
   setMobileMove: (mobileMove: { x: number; z: number; running?: boolean }) => void;
+  rotateCamera: (delta: number) => void;
+  setPlayerPosition: (playerPosition: { x: number; z: number }) => void;
   setLoading: (isLoading: boolean) => void;
   setError: (error: string | null) => void;
 };
@@ -27,6 +31,8 @@ export const useKingdomStore = create<KingdomState>((set) => ({
   selectedRepo: null,
   selectedCity: null,
   mobileMove: { x: 0, z: 0, running: false },
+  cameraYawOffset: 0,
+  playerPosition: { x: 0, z: 8 },
   isLoading: true,
   error: null,
   setCities: (cities) =>
@@ -53,6 +59,8 @@ export const useKingdomStore = create<KingdomState>((set) => ({
         running: mobileMove.running ?? state.mobileMove.running
       }
     })),
+  rotateCamera: (delta) => set((state) => ({ cameraYawOffset: state.cameraYawOffset + delta })),
+  setPlayerPosition: (playerPosition) => set({ playerPosition }),
   setLoading: (isLoading) => set({ isLoading }),
   setError: (error) => set({ error })
 }));

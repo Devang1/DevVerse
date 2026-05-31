@@ -27,10 +27,6 @@ const CITY_PLAZA_RADIUS = 6.2;
 const CITY_ROAD_HALF_WIDTH = 2.3;
 const REPO_BLOCK_SPACING = 4.75;
 const MAX_RENDERED_REPOS = 32;
-const WORLD_MIN_X = -175;
-const WORLD_MAX_X = 175;
-const WORLD_MIN_Z = -210;
-const WORLD_MAX_Z = 14;
 
 function displayRepoName(name: string) {
   return name.length > 18 ? `${name.slice(0, 16)}...` : name;
@@ -61,7 +57,7 @@ function cityRadius(repoCount: number) {
   return Math.max(15, Math.hypot(halfWidth, halfDepth) + 8);
 }
 
-function cityPositions(cities: DeveloperCity[]) {
+export function getCityPositions(cities: DeveloperCity[]) {
   if (!cities.length) return [];
   const centerRadius = cityRadius(visibleRepos(cities[0]).length);
   return cities.map((city, index) => {
@@ -185,45 +181,6 @@ function WorldRoads({ positions }: { positions: [number, number, number][] }) {
         <boxGeometry args={[84, 0.08, 1.5]} />
         <meshStandardMaterial color="#777b73" roughness={0.96} />
       </mesh>
-    </group>
-  );
-}
-
-function WorldBoundary() {
-  const width = WORLD_MAX_X - WORLD_MIN_X;
-  const depth = WORLD_MAX_Z - WORLD_MIN_Z;
-  const centerX = (WORLD_MIN_X + WORLD_MAX_X) / 2;
-  const centerZ = (WORLD_MIN_Z + WORLD_MAX_Z) / 2;
-
-  return (
-    <group>
-      <mesh receiveShadow position={[centerX, 0.045, WORLD_MIN_Z]}>
-        <boxGeometry args={[width, 0.09, 1.05]} />
-        <meshStandardMaterial color="#314f57" roughness={0.82} emissive="#12343b" emissiveIntensity={0.18} />
-      </mesh>
-      <mesh receiveShadow position={[centerX, 0.045, WORLD_MAX_Z]}>
-        <boxGeometry args={[width, 0.09, 1.05]} />
-        <meshStandardMaterial color="#314f57" roughness={0.82} emissive="#12343b" emissiveIntensity={0.18} />
-      </mesh>
-      <mesh receiveShadow position={[WORLD_MIN_X, 0.045, centerZ]}>
-        <boxGeometry args={[1.05, 0.09, depth]} />
-        <meshStandardMaterial color="#314f57" roughness={0.82} emissive="#12343b" emissiveIntensity={0.18} />
-      </mesh>
-      <mesh receiveShadow position={[WORLD_MAX_X, 0.045, centerZ]}>
-        <boxGeometry args={[1.05, 0.09, depth]} />
-        <meshStandardMaterial color="#314f57" roughness={0.82} emissive="#12343b" emissiveIntensity={0.18} />
-      </mesh>
-      {[
-        [WORLD_MIN_X, WORLD_MIN_Z],
-        [WORLD_MAX_X, WORLD_MIN_Z],
-        [WORLD_MIN_X, WORLD_MAX_Z],
-        [WORLD_MAX_X, WORLD_MAX_Z]
-      ].map(([x, z]) => (
-        <mesh key={`${x}-${z}`} castShadow position={[x, 0.62, z]}>
-          <cylinderGeometry args={[0.28, 0.34, 1.25, 8]} />
-          <meshStandardMaterial color="#e5b14c" roughness={0.45} metalness={0.2} emissive="#7c5420" emissiveIntensity={0.2} />
-        </mesh>
-      ))}
     </group>
   );
 }
@@ -474,10 +431,14 @@ function Player({ cities, positions }: { cities: DeveloperCity[]; positions: [nu
   const avatar = useRef<Group>(null);
   const keys = useRef<Record<string, boolean>>({});
   const velocity = useRef(new Vector3());
+  const cameraYaw = useRef(Math.PI);
+  const lastFocusedCity = useRef<string | null>(null);
   const { camera } = useThree();
   const activeCity = useKingdomStore((state) => state.activeCity);
   const mobileMove = useKingdomStore((state) => state.mobileMove);
+  const cameraYawOffset = useKingdomStore((state) => state.cameraYawOffset);
   const setSelected = useKingdomStore((state) => state.setSelected);
+  const setPlayerPosition = useKingdomStore((state) => state.setPlayerPosition);
   const collisionCircles = useMemo(() => cityCollisionCircles(cities, positions), [cities, positions]);
 
   useEffect(() => {
@@ -500,33 +461,50 @@ function Player({ cities, positions }: { cities: DeveloperCity[]; positions: [nu
     setSelected(activeCity ? `Exploring @${activeCity}` : "World map");
   }, [activeCity, setSelected]);
 
+  useEffect(() => {
+    if (!player.current || !activeCity || lastFocusedCity.current === activeCity) return;
+    const cityIndex = cities.findIndex((city) => city.login === activeCity);
+    const [x, , z] = positions[cityIndex] ?? [0, 0, 0];
+    player.current.position.set(x, 0, z + 8);
+    velocity.current.set(0, 0, 0);
+    setPlayerPosition({ x, z: z + 8 });
+    cameraYaw.current = Math.PI;
+    lastFocusedCity.current = activeCity;
+  }, [activeCity, cities, positions, setPlayerPosition]);
+
   useFrame((_, delta) => {
     if (!player.current) return;
-    const keyboardInput = new Vector3(
+    const rawInput = new Vector3(
       Number(Boolean(keys.current.d || keys.current.arrowright)) -
         Number(Boolean(keys.current.a || keys.current.arrowleft)),
       0,
       Number(Boolean(keys.current.s || keys.current.arrowdown)) -
         Number(Boolean(keys.current.w || keys.current.arrowup))
     );
-    const mobileInput = new Vector3(mobileMove.x, 0, mobileMove.z);
-    const input = keyboardInput.lengthSq() > 0 ? keyboardInput : mobileInput;
+    if (rawInput.lengthSq() === 0) rawInput.set(mobileMove.x, 0, mobileMove.z);
+    const viewYaw = cameraYaw.current + cameraYawOffset;
+    const forward = new Vector3(Math.sin(viewYaw), 0, Math.cos(viewYaw));
+    const right = new Vector3(-Math.cos(viewYaw), 0, Math.sin(viewYaw));
+    const input = right.multiplyScalar(rawInput.x).add(forward.multiplyScalar(-rawInput.z));
     const speed = keys.current.shift || mobileMove.running ? 8 : 4.8;
     if (input.lengthSq() > 0) input.normalize().multiplyScalar(speed);
     velocity.current.lerp(input, 1 - Math.exp(-delta * (input.lengthSq() ? 9 : 13)));
     const next = player.current.position.clone().addScaledVector(velocity.current, delta);
-    next.x = MathUtils.clamp(next.x, WORLD_MIN_X, WORLD_MAX_X);
-    next.z = MathUtils.clamp(next.z, WORLD_MIN_Z, WORLD_MAX_Z);
     const collides = collisionCircles.some(({ x, z, radius }) => Math.hypot(next.x - x, next.z - z) < radius);
-    if (!collides) player.current.position.copy(next);
+    if (!collides) {
+      player.current.position.copy(next);
+      setPlayerPosition({ x: next.x, z: next.z });
+    }
     else velocity.current.multiplyScalar(0.12);
     if (velocity.current.lengthSq() > 0.08) {
-      player.current.rotation.y = Math.atan2(velocity.current.x, velocity.current.z);
+      const movementYaw = Math.atan2(velocity.current.x, velocity.current.z);
+      player.current.rotation.y = movementYaw;
       if (avatar.current) avatar.current.position.y = Math.abs(Math.sin(Date.now() * 0.011)) * 0.09;
     } else if (avatar.current) {
       avatar.current.position.y = MathUtils.lerp(avatar.current.position.y, 0, 0.15);
     }
-    const target = player.current.position.clone().add(new Vector3(0, 7.5, 10));
+    const orbitYaw = cameraYaw.current + cameraYawOffset;
+    const target = player.current.position.clone().add(new Vector3(Math.sin(orbitYaw) * -10, 7.5, Math.cos(orbitYaw) * -10));
     camera.position.lerp(target, 0.05);
     camera.lookAt(player.current.position.clone().add(new Vector3(0, 1.3, 0)));
   });
@@ -623,7 +601,7 @@ function Player({ cities, positions }: { cities: DeveloperCity[]; positions: [nu
 
 export function DevVerseScene() {
   const cities = useKingdomStore((state) => state.cities);
-  const positions = useMemo(() => cityPositions(cities), [cities]);
+  const positions = useMemo(() => getCityPositions(cities), [cities]);
 
   return (
     <>
@@ -644,7 +622,6 @@ export function DevVerseScene() {
         shadow-camera-bottom={-55}
       />
       <Ground positions={positions} />
-      <WorldBoundary />
       <WorldRoads positions={positions} />
       {cities.map((city, index) => (
         <DeveloperCityView key={city.login} city={city} position={positions[index] ?? [0, 0, -45]} />

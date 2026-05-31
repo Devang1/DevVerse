@@ -3,8 +3,8 @@
 import { Canvas } from "@react-three/fiber";
 import { Building2, ExternalLink, GitFork, Github, Globe, Linkedin, Loader2, Map, MapPin, MessageCircle, Search, Send, Star, Trophy, UserPlus, Users, X } from "lucide-react";
 import { motion } from "framer-motion";
-import { FormEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DevVerseScene } from "@/components/devverse-scene";
+import { type FormEvent, type PointerEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DevVerseScene, getCityPositions } from "@/components/devverse-scene";
 import { AccountPanel } from "@/components/account-panel";
 import { useKingdomStore } from "@/components/kingdom-store";
 import type { WorldResponse } from "@/lib/github-world";
@@ -22,11 +22,13 @@ export default function Home() {
   const [friendRequests, setFriendRequests] = useState<PublicUser[]>([]);
   const [unreadByPeer, setUnreadByPeer] = useState<Record<string, number>>({});
   const [messagesOpen, setMessagesOpen] = useState(false);
+  const [mapOpen, setMapOpen] = useState(false);
   const [showFriendList, setShowFriendList] = useState(true);
   const [activeChatPeerId, setActiveChatPeerId] = useState("");
   const currentUserRef = useRef<PublicUser | null>(null);
   const knownMessageIds = useRef<Set<string>>(new Set());
   const notificationBaselines = useRef<Set<string>>(new Set());
+  const cameraSwipe = useRef({ active: false, x: 0, y: 0 });
   const requestVersion = useRef(0);
   const cities = useKingdomStore((state) => state.cities);
   const activeCity = useKingdomStore((state) => state.activeCity);
@@ -41,11 +43,14 @@ export default function Home() {
   const setError = useKingdomStore((state) => state.setError);
   const setSelectedRepo = useKingdomStore((state) => state.setSelectedRepo);
   const setMobileMove = useKingdomStore((state) => state.setMobileMove);
+  const rotateCamera = useKingdomStore((state) => state.rotateCamera);
+  const playerPosition = useKingdomStore((state) => state.playerPosition);
 
   const active = useMemo(
     () => cities.find((city) => city.login === activeCity) ?? cities[0],
     [activeCity, cities]
   );
+  const mapPositions = useMemo(() => getCityPositions(cities), [cities]);
 
   useEffect(() => {
     currentUserRef.current = currentUser;
@@ -276,9 +281,35 @@ export default function Home() {
     setMessagesOpen(true);
   }
 
+  function startCameraSwipe(event: PointerEvent<HTMLDivElement>) {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    cameraSwipe.current = { active: true, x: event.clientX, y: event.clientY };
+  }
+
+  function moveCameraSwipe(event: PointerEvent<HTMLDivElement>) {
+    if (!cameraSwipe.current.active) return;
+    const deltaX = event.clientX - cameraSwipe.current.x;
+    const deltaY = event.clientY - cameraSwipe.current.y;
+    if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 1) {
+      rotateCamera(deltaX * 0.008);
+    }
+    cameraSwipe.current = { active: true, x: event.clientX, y: event.clientY };
+  }
+
+  function stopCameraSwipe() {
+    cameraSwipe.current.active = false;
+  }
+
   return (
     <main className="relative h-dvh w-screen overflow-hidden bg-[#a8d4e4] text-stone-50">
-      <div className="absolute inset-0">
+      <div
+        className="absolute inset-0 touch-none"
+        onPointerDown={startCameraSwipe}
+        onPointerMove={moveCameraSwipe}
+        onPointerUp={stopCameraSwipe}
+        onPointerCancel={stopCameraSwipe}
+        onPointerLeave={stopCameraSwipe}
+      >
         <Canvas
           camera={{ position: [0, 8, 18], fov: 52 }}
           dpr={[1, 1.35]}
@@ -303,7 +334,7 @@ export default function Home() {
             </div>
           </motion.div>
 
-          <div className="grid grid-cols-[1fr_auto_auto] gap-2 sm:flex">
+          <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 sm:flex">
           <form onSubmit={handleSearch} className="glass-panel pointer-events-auto flex min-w-0 rounded-lg p-1">
             <label className="sr-only" htmlFor="github-user">GitHub username</label>
             <input
@@ -322,6 +353,13 @@ export default function Home() {
               {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
             </button>
           </form>
+          <MiniMap
+            activeCity={activeCity}
+            cities={cities}
+            positions={mapPositions}
+            playerPosition={playerPosition}
+            onOpen={() => setMapOpen(true)}
+          />
           <button
             onClick={() => setMessagesOpen(true)}
             className="glass-panel pointer-events-auto flex h-11 items-center justify-center gap-2 rounded-lg px-3 text-sm transition hover:bg-black/70"
@@ -464,6 +502,20 @@ export default function Home() {
             )}
           </div>
         </div>
+      )}
+
+      {mapOpen && (
+        <CityMapOverlay
+          activeCity={activeCity}
+          cities={cities}
+          positions={mapPositions}
+          playerPosition={playerPosition}
+          onClose={() => setMapOpen(false)}
+          onSelect={(cityLogin) => {
+            setActiveCity(cityLogin);
+            setMapOpen(false);
+          }}
+        />
       )}
 
       <aside className="pointer-events-none absolute bottom-3 left-3 top-24 z-10 hidden w-64 sm:block">
@@ -739,34 +791,221 @@ function friendName(user: PublicUser) {
   return user.profile.displayName || user.profile.githubUsername || user.email;
 }
 
+function buildMapPoints(
+  cities: WorldResponse["cities"],
+  positions: [number, number, number][],
+  playerPosition: { x: number; z: number }
+) {
+  const worldPoints = cities.map((city, index) => ({
+    city,
+    x: positions[index]?.[0] ?? 0,
+    z: positions[index]?.[2] ?? 0
+  }));
+  const xs = [...worldPoints.map((point) => point.x), playerPosition.x, -40, 40];
+  const zs = [...worldPoints.map((point) => point.z), playerPosition.z, -60, 20];
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minZ = Math.min(...zs);
+  const maxZ = Math.max(...zs);
+  const rangeX = Math.max(1, maxX - minX);
+  const rangeZ = Math.max(1, maxZ - minZ);
+  const toScreen = (x: number, z: number) => ({
+    left: 8 + ((x - minX) / rangeX) * 84,
+    top: 8 + ((z - minZ) / rangeZ) * 84
+  });
+
+  return {
+    points: worldPoints.map((point) => ({ ...point, ...toScreen(point.x, point.z) })),
+    player: toScreen(playerPosition.x, playerPosition.z)
+  };
+}
+
+function MiniMap({
+  activeCity,
+  cities,
+  positions,
+  playerPosition,
+  onOpen
+}: {
+  activeCity: string | null;
+  cities: WorldResponse["cities"];
+  positions: [number, number, number][];
+  playerPosition: { x: number; z: number };
+  onOpen: () => void;
+}) {
+  const { points, player } = buildMapPoints(cities, positions, playerPosition);
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="glass-panel pointer-events-auto relative h-11 w-11 shrink-0 overflow-hidden rounded-full border-aqua/30 p-0 shadow-2xl transition hover:scale-105 sm:h-12 sm:w-12"
+      aria-label="Open world map"
+      title="Open world map"
+    >
+      <div className="absolute inset-0 rounded-full bg-[#17332d]" />
+      <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" aria-hidden="true">
+        <defs>
+          <clipPath id="mini-map-clip">
+            <circle cx="50" cy="50" r="49" />
+          </clipPath>
+        </defs>
+        <g clipPath="url(#mini-map-clip)">
+          <rect width="100" height="100" fill="#17332d" />
+          <path d="M50 50 L50 8 M50 50 L92 50 M50 50 L14 84 M50 50 L82 18" stroke="rgba(246,243,235,.32)" strokeWidth="2" />
+          <circle cx={player.left} cy={player.top} r="4.2" fill="#f7f3e8" stroke="#d77a35" strokeWidth="2" />
+          {points.map(({ city, left, top }) => (
+            <circle
+              key={city.login}
+              cx={left}
+              cy={top}
+              r={city.login === activeCity ? 4.8 : 3.4}
+              fill={city.login === activeCity ? "#d77a35" : "#61c3b6"}
+              stroke="#081014"
+              strokeWidth="1.5"
+            />
+          ))}
+        </g>
+        <circle cx="50" cy="50" r="49" fill="none" stroke="rgba(246,243,235,.28)" strokeWidth="2" />
+      </svg>
+      <span className="sr-only">Open map</span>
+    </button>
+  );
+}
+
+function CityMapOverlay({
+  activeCity,
+  cities,
+  positions,
+  playerPosition,
+  onClose,
+  onSelect
+}: {
+  activeCity: string | null;
+  cities: WorldResponse["cities"];
+  positions: [number, number, number][];
+  playerPosition: { x: number; z: number };
+  onClose: () => void;
+  onSelect: (cityLogin: string) => void;
+}) {
+  const { points, player } = buildMapPoints(cities, positions, playerPosition);
+  const center = points[0] ?? { left: 50, top: 50 };
+
+  return (
+    <div className="pointer-events-auto fixed inset-0 z-30 grid place-items-center bg-black/55 p-3">
+      <div className="glass-panel flex h-[82dvh] w-full max-w-4xl flex-col overflow-hidden rounded-lg">
+        <div className="flex shrink-0 items-center justify-between border-b border-white/10 p-3 sm:p-4">
+          <div>
+            <h2 className="text-lg font-semibold">City Map</h2>
+            <p className="text-xs text-stone-400">Choose a city to jump there.</p>
+          </div>
+          <button onClick={onClose} className="hud-button" aria-label="Close city map">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="grid min-h-0 flex-1 gap-3 p-3 md:grid-cols-[1fr_18rem]">
+          <div className="relative min-h-[18rem] overflow-hidden rounded-lg border border-white/10 bg-[#172a25]">
+            <div className="absolute inset-0 opacity-35 [background-image:linear-gradient(rgba(255,255,255,.12)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.12)_1px,transparent_1px)] [background-size:28px_28px]" />
+            <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+              {points.slice(1).map((point) => (
+                <line
+                  key={`${point.city.login}-road`}
+                  x1={center.left}
+                  y1={center.top}
+                  x2={point.left}
+                  y2={point.top}
+                  stroke="rgba(246,243,235,.34)"
+                  strokeWidth="1.5"
+                />
+              ))}
+              <line x1="6" y1="88" x2="94" y2="12" stroke="rgba(97,195,182,.26)" strokeWidth="1.2" />
+              <line x1="12" y1="20" x2="86" y2="76" stroke="rgba(97,195,182,.22)" strokeWidth="1.2" />
+            </svg>
+            <div
+              className="absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-copper bg-white shadow-lg"
+              style={{ left: `${player.left}%`, top: `${player.top}%` }}
+              title="You"
+            />
+            {points.map(({ city, left, top }) => {
+              const isActive = city.login === activeCity;
+              return (
+                <div key={city.login} className="absolute -translate-x-1/2 -translate-y-1/2" style={{ left: `${left}%`, top: `${top}%` }}>
+                  <button
+                    onClick={() => onSelect(city.login)}
+                    className={`grid h-9 w-9 place-items-center rounded-full border shadow-lg transition hover:scale-110 ${
+                      isActive ? "border-copper bg-copper text-white" : "border-aqua/70 bg-black/80 text-aqua"
+                    }`}
+                    aria-label={`Jump to ${city.login}`}
+                    title={`@${city.login}`}
+                  >
+                    <MapPin className="h-4 w-4" />
+                  </button>
+                  <span className="pointer-events-none absolute left-1/2 top-10 max-w-28 -translate-x-1/2 truncate rounded bg-black/75 px-2 py-0.5 text-[10px] font-medium text-white">
+                    @{city.login}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="min-h-0 overflow-auto rounded-lg border border-white/10 bg-black/20 p-2">
+            {cities.map((city) => (
+              <button
+                key={city.login}
+                onClick={() => onSelect(city.login)}
+                className={`mb-2 w-full rounded-md border px-3 py-2 text-left transition ${
+                  city.login === activeCity
+                    ? "border-copper/80 bg-copper/20"
+                    : "border-white/10 bg-white/[0.04] hover:bg-white/[0.09]"
+                }`}
+              >
+                <span className="block truncate text-sm font-medium">@{city.login}</span>
+                <span className="mt-1 block text-xs text-stone-300">
+                  {city.publicRepos.toLocaleString()} repos · {city.totalStars.toLocaleString()} stars
+                </span>
+                <span className="mt-1 block truncate text-[11px] text-aqua">
+                  {city.topLanguages.join(" / ") || "Mixed stack"}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MobileMovementControls({
   onMove
 }: {
   onMove: (mobileMove: { x: number; z: number; running?: boolean }) => void;
 }) {
+  const lastTap = useRef<{ key: string; at: number }>({ key: "", at: 0 });
   const stopMoving = () => onMove({ x: 0, z: 0, running: false });
-  const startMoving = (x: number, z: number, running = false) => {
-    onMove({ x, z, running });
+  const startMoving = (key: string, x: number, z: number, running = false) => {
+    const now = Date.now();
+    const doubleTapRun = lastTap.current.key === key && now - lastTap.current.at < 320;
+    lastTap.current = { key, at: now };
+    onMove({ x, z, running: running || doubleTapRun });
   };
 
   return (
     <div className="pointer-events-none absolute bottom-3 left-3 z-20 grid grid-cols-3 gap-2 sm:hidden">
       <div />
-      <MoveButton label="Move forward" onStart={() => startMoving(0, -1)} onStop={stopMoving}>
+      <MoveButton label="Move forward" onStart={() => startMoving("forward", 0, -1)} onStop={stopMoving}>
         ^
       </MoveButton>
       <div />
-      <MoveButton label="Move left" onStart={() => startMoving(-1, 0)} onStop={stopMoving}>
+      <MoveButton label="Move left" onStart={() => startMoving("left", -1, 0)} onStop={stopMoving}>
         &lt;
       </MoveButton>
-      <MoveButton label="Run forward" onStart={() => startMoving(0, -1, true)} onStop={stopMoving}>
+      <MoveButton label="Run forward" onStart={() => startMoving("forward", 0, -1, true)} onStop={stopMoving}>
         Run
       </MoveButton>
-      <MoveButton label="Move right" onStart={() => startMoving(1, 0)} onStop={stopMoving}>
+      <MoveButton label="Move right" onStart={() => startMoving("right", 1, 0)} onStop={stopMoving}>
         &gt;
       </MoveButton>
       <div />
-      <MoveButton label="Move backward" onStart={() => startMoving(0, 1)} onStop={stopMoving}>
+      <MoveButton label="Move backward" onStart={() => startMoving("backward", 0, 1)} onStop={stopMoving}>
         v
       </MoveButton>
       <div />
