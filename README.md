@@ -14,7 +14,7 @@ The app also includes developer profiles, friend requests, and friend-only messa
 - Editable developer profile.
 - Friend request and accept flow.
 - Messaging restricted to accepted friends only.
-- Local JSON persistence by default, with optional PostgreSQL support.
+- Local JSON persistence for development, with PostgreSQL required for production.
 
 ## Tech Stack
 
@@ -41,7 +41,7 @@ Create `.env.local`:
 ```env
 AUTH_SECRET=change-this-secret-for-local-development
 
-# Optional. Without this, DevVerse stores users, friends, and chats in data/*.json.
+# Required in production. Without this, local development stores users, friends, and chats in data/*.json.
 DATABASE_URL=
 
 # Optional. Use true for hosted Postgres providers that require SSL.
@@ -104,19 +104,21 @@ Local JSON mode:
 
 - Used automatically when `DATABASE_URL` is empty.
 - Stores data in the `data/` folder.
-- Good for local development and demos.
+- Good for local development and demos only.
+- Disabled for production writes because hosted deployments usually have read-only filesystems.
 
 PostgreSQL mode:
 
 - Enabled by setting `DATABASE_URL`.
 - Tables are created automatically on first use.
-- Stores users, messages, and friendships in PostgreSQL.
+- Stores users, messages, friendships, and GitHub city cache entries in PostgreSQL.
 
 The app uses these tables:
 
 - `devverse_users`
 - `devverse_messages`
 - `devverse_friendships`
+- `devverse_github_city_cache`
 
 ## Project Structure
 
@@ -138,7 +140,7 @@ lib/
   github-world.ts     Shared GitHub world types
 
 data/
-  *.json              Local development storage and GitHub cache
+  *.json              Local development storage, ignored by git
 ```
 
 ## Controls
@@ -150,7 +152,7 @@ data/
 
 ## Notes
 
-- GitHub data is fetched from the public GitHub API and cached in `data/github-cities.json`.
+- GitHub data is fetched from the public GitHub API and cached in PostgreSQL when `DATABASE_URL` is configured.
 - Only GitHub usernames from registered DevVerse profiles are loaded into the world.
 - Friend requests must be accepted before chat is available.
 - Keep `AUTH_SECRET` private in production.

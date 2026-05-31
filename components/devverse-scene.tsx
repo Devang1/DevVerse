@@ -44,6 +44,11 @@ function visibleRepos(city: DeveloperCity) {
   return city.repos.slice(0, MAX_RENDERED_REPOS);
 }
 
+function isEditableTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  return Boolean(target.closest("input, textarea, select, [contenteditable='true']"));
+}
+
 function layoutColumns(repoCount: number) {
   return Math.max(4, Math.ceil(Math.sqrt(Math.max(1, repoCount))) + 1);
 }
@@ -477,6 +482,7 @@ function Player({ cities, positions }: { cities: DeveloperCity[]; positions: [nu
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (isEditableTarget(event.target)) return;
       keys.current[event.key.toLowerCase()] = true;
     };
     const onKeyUp = (event: KeyboardEvent) => {

@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { findRegisteredProfileByGithubUsername, listRegisteredUsers } from "@/lib/auth";
+import {
+  ensureDatabaseSchema,
+  findRegisteredProfileByGithubUsername,
+  getDatabasePool,
+  listRegisteredUsers
+} from "@/lib/auth";
 import type { DeveloperCity, GitHubRepo, WorldResponse } from "@/lib/github-world";
 
 type GitHubUserResponse = {
@@ -38,6 +43,12 @@ const headers = {
 
 const REQUEST_TIMEOUT_MS = 8000;
 const MAX_REPOS_PER_CITY = 32;
+const CITY_CACHE_TTL_MS = 1000 * 60 * 15;
+
+type CachedCityRow = {
+  city: DeveloperCity;
+  fetched_at: Date | string;
+};
 
 function githubFetch(url: string) {
   return fetch(url, {
@@ -66,6 +77,39 @@ function trimCityForWorld(city: DeveloperCity): DeveloperCity {
     repos,
     totalStars: city.repos.reduce((total, repo) => total + repo.stars, 0),
   };
+}
+
+function cacheKey(username: string) {
+  return username.trim().toLowerCase();
+}
+
+async function readCachedCity(username: string): Promise<{ city: DeveloperCity; fetchedAt: Date } | null> {
+  const db = getDatabasePool();
+  if (!db) return null;
+  await ensureDatabaseSchema();
+  const result = await db.query<CachedCityRow>(
+    "SELECT city, fetched_at FROM devverse_github_city_cache WHERE username = $1 LIMIT 1",
+    [cacheKey(username)]
+  );
+  const cached = result.rows[0];
+  if (!cached) return null;
+  return {
+    city: trimCityForWorld(cached.city),
+    fetchedAt: cached.fetched_at instanceof Date ? cached.fetched_at : new Date(cached.fetched_at)
+  };
+}
+
+async function writeCachedCity(city: DeveloperCity) {
+  const db = getDatabasePool();
+  if (!db) return;
+  await ensureDatabaseSchema();
+  await db.query(
+    `INSERT INTO devverse_github_city_cache (username, city, fetched_at)
+     VALUES ($1, $2, NOW())
+     ON CONFLICT (username)
+     DO UPDATE SET city = EXCLUDED.city, fetched_at = NOW()`,
+    [cacheKey(city.login), trimCityForWorld(city)]
+  );
 }
 
 async function attachRegisteredProfile(
@@ -158,6 +202,21 @@ async function fetchCity(username: string): Promise<DeveloperCity | null> {
   }
 }
 
+async function fetchCityWithCache(username: string): Promise<DeveloperCity | null> {
+  const cached = await readCachedCity(username);
+  if (cached && Date.now() - cached.fetchedAt.getTime() < CITY_CACHE_TTL_MS) {
+    return cached.city;
+  }
+
+  const city = await fetchCity(username);
+  if (city) {
+    await writeCachedCity(city);
+    return city;
+  }
+
+  return cached?.city ?? null;
+}
+
 export async function GET(request: NextRequest) {
   const requested = request.nextUrl.searchParams.get("user")?.trim();
 
@@ -168,10 +227,13 @@ export async function GET(request: NextRequest) {
       .map((user) => user.profile.githubUsername.trim())
       .filter(Boolean);
 
-    const usernames = requested
-      ? registeredGithubUsers.filter(
-          (username) => username.toLowerCase() === requested.toLowerCase()
-        )
+    const requestedUsername = requested?.toLowerCase();
+    const usernames = requestedUsername
+      ? [...registeredGithubUsers].sort((a, b) => {
+          if (a.toLowerCase() === requestedUsername) return -1;
+          if (b.toLowerCase() === requestedUsername) return 1;
+          return 0;
+        })
       : registeredGithubUsers;
 
     if (!usernames.length) {
@@ -182,7 +244,7 @@ export async function GET(request: NextRequest) {
     }
 
     const fetchedCities = await Promise.all(
-      usernames.map((username) => fetchCity(username))
+      usernames.map((username) => fetchCityWithCache(username))
     );
 
     const cities = await Promise.all(

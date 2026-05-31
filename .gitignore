@@ -30,6 +30,7 @@ pnpm-debug.log*
 *.db
 *.sqlite
 *.sqlite3
+/data/*.json
 
 # prisma
 prisma/dev.db

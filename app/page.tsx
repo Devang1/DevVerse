@@ -23,6 +23,7 @@ export default function Home() {
   const [messagesOpen, setMessagesOpen] = useState(false);
   const [showFriendList, setShowFriendList] = useState(true);
   const [activeChatPeerId, setActiveChatPeerId] = useState("");
+  const currentUserRef = useRef<PublicUser | null>(null);
   const requestVersion = useRef(0);
   const cities = useKingdomStore((state) => state.cities);
   const activeCity = useKingdomStore((state) => state.activeCity);
@@ -43,6 +44,10 @@ export default function Home() {
     [activeCity, cities]
   );
 
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
+
   const loadWorld = useCallback(
     async (username?: string) => {
       const version = ++requestVersion.current;
@@ -56,7 +61,15 @@ export default function Home() {
         const data = (await response.json()) as WorldResponse;
         if (version !== requestVersion.current) return;
         setCities(data.cities);
-        if (username && data.cities[0]) setActiveCity(data.cities[0].login);
+        if (username && data.cities[0]) {
+          const normalizedUsername = username.toLowerCase();
+          const matchedCity = data.cities.find((city) => city.login.toLowerCase() === normalizedUsername);
+          const signedInUser = currentUserRef.current;
+          const signedInCity = signedInUser
+            ? data.cities.find((city) => city.login.toLowerCase() === signedInUser.profile.githubUsername.toLowerCase())
+            : null;
+          setActiveCity((matchedCity ?? signedInCity ?? data.cities[0]).login);
+        }
       } catch (requestError) {
         if (version !== requestVersion.current) return;
         setError(requestError instanceof Error ? requestError.message : "Could not load GitHub data.");
@@ -429,12 +442,12 @@ export default function Home() {
             key={active?.login ?? "loading"}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="glass-panel pointer-events-auto max-h-[34dvh] w-full overflow-auto rounded-lg p-3 sm:max-h-[72dvh] sm:max-w-sm sm:p-4"
+            className="glass-panel pointer-events-auto max-h-[38dvh] w-full min-w-0 overflow-auto rounded-lg p-3 sm:max-h-[72dvh] sm:max-w-sm sm:p-4"
           >
             {selectedRepo ? (
               <>
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-xs uppercase text-stone-400">Repository building</p>
                     <h2 className="mt-1 break-words text-lg font-semibold">{selectedRepo.name}</h2>
                     <p className="mt-1 text-sm text-aqua">{selectedRepo.language ?? "Mixed stack"}</p>
@@ -451,12 +464,12 @@ export default function Home() {
                 <p className="mt-3 text-sm leading-5 text-stone-300">
                   {selectedRepo.description ?? "No repository description is available on GitHub."}
                 </p>
-                <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-stone-300">
-                  <span className="rounded border border-white/10 bg-white/[0.04] px-2 py-1">
+                <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-stone-300 sm:grid-cols-3">
+                  <span className="min-w-0 truncate rounded border border-white/10 bg-white/[0.04] px-2 py-1">
                     {selectedRepo.language ?? "Mixed"}
                   </span>
-                  <span className="flex items-center gap-1"><Star className="h-3.5 w-3.5 text-[#e5b14c]" /> {selectedRepo.stars.toLocaleString()}</span>
-                  <span className="flex items-center gap-1"><GitFork className="h-3.5 w-3.5 text-aqua" /> {selectedRepo.forks.toLocaleString()}</span>
+                  <span className="flex min-w-0 items-center gap-1 rounded border border-white/10 bg-white/[0.04] px-2 py-1"><Star className="h-3.5 w-3.5 shrink-0 text-[#e5b14c]" /> {selectedRepo.stars.toLocaleString()}</span>
+                  <span className="flex min-w-0 items-center gap-1 rounded border border-white/10 bg-white/[0.04] px-2 py-1"><GitFork className="h-3.5 w-3.5 shrink-0 text-aqua" /> {selectedRepo.forks.toLocaleString()}</span>
                 </div>
                 <p className="mt-3 rounded-md border border-white/10 bg-white/[0.04] px-3 py-2 text-xs leading-5 text-stone-300">
                   Building height follows stars. Color shows the main language. Click a building to inspect the repo here.
@@ -473,12 +486,12 @@ export default function Home() {
             ) : selectedCity ? (
               <>
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-xs uppercase text-stone-400">City hall profile</p>
-                    <h2 className="mt-1 text-xl font-semibold">
+                    <h2 className="mt-1 break-words text-lg font-semibold sm:text-xl">
                       {selectedCity.registeredProfile?.displayName ?? selectedCity.name}
                     </h2>
-                    <p className="text-sm text-aqua">@{selectedCity.login}</p>
+                    <p className="break-words text-sm text-aqua">@{selectedCity.login}</p>
                   </div>
                   <a
                     href={selectedCity.htmlUrl}
@@ -496,21 +509,21 @@ export default function Home() {
                     selectedCity.bio ||
                     "This city is generated from a public GitHub profile. Registered users can add portfolio and coding links."}
                 </p>
-                <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-stone-300">
-                  <span className="flex items-center gap-1 rounded border border-white/10 bg-white/[0.04] px-2 py-1">
-                    <Building2 className="h-3.5 w-3.5 text-copper" /> {selectedCity.publicRepos.toLocaleString()} repos
+                <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-stone-300 sm:grid-cols-2">
+                  <span className="flex min-w-0 items-center gap-1 rounded border border-white/10 bg-white/[0.04] px-2 py-1">
+                    <Building2 className="h-3.5 w-3.5 shrink-0 text-copper" /> {selectedCity.publicRepos.toLocaleString()} repos
                   </span>
-                  <span className="flex items-center gap-1 rounded border border-white/10 bg-white/[0.04] px-2 py-1">
-                    <Star className="h-3.5 w-3.5 text-[#e5b14c]" /> {selectedCity.totalStars.toLocaleString()} stars
+                  <span className="flex min-w-0 items-center gap-1 rounded border border-white/10 bg-white/[0.04] px-2 py-1">
+                    <Star className="h-3.5 w-3.5 shrink-0 text-[#e5b14c]" /> {selectedCity.totalStars.toLocaleString()} stars
                   </span>
                   {(selectedCity.registeredProfile?.location || selectedCity.location) && (
-                    <span className="col-span-2 flex items-center gap-1 rounded border border-white/10 bg-white/[0.04] px-2 py-1">
-                      <MapPin className="h-3.5 w-3.5 text-aqua" /> {selectedCity.registeredProfile?.location || selectedCity.location}
+                    <span className="flex min-w-0 items-center gap-1 rounded border border-white/10 bg-white/[0.04] px-2 py-1 sm:col-span-2">
+                      <MapPin className="h-3.5 w-3.5 shrink-0 text-aqua" /> <span className="break-words">{selectedCity.registeredProfile?.location || selectedCity.location}</span>
                     </span>
                   )}
                 </div>
                 {selectedCity.registeredProfile ? (
-                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                  <div className="mt-3 grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
                     <ProfileLink href={selectedCity.registeredProfile.portfolioUrl} icon={<Globe className="h-3.5 w-3.5" />} label="Portfolio" />
                     <ProfileLink href={selectedCity.registeredProfile.linkedinUrl} icon={<Linkedin className="h-3.5 w-3.5" />} label="LinkedIn" />
                     <ProfileLink href={selectedCity.registeredProfile.leetcodeUrl} icon={<Trophy className="h-3.5 w-3.5" />} label="LeetCode" />
@@ -521,7 +534,7 @@ export default function Home() {
                     No DevVerse profile is linked to this GitHub user yet. Registered profiles are stored in PostgreSQL when `DATABASE_URL` is configured.
                   </p>
                 )}
-                <p className="mt-3 truncate border-t border-white/10 pt-3 text-xs text-stone-400">
+                <p className="mt-3 break-words border-t border-white/10 pt-3 text-xs text-stone-400">
                   Top stack: {selectedCity.topLanguages.join(" / ") || "Mixed stack"}
                 </p>
                 {currentUser && selectedCity.registeredProfile && selectedCity.registeredProfile.userId !== currentUser.id && (
@@ -604,10 +617,10 @@ export default function Home() {
             ) : active ? (
               <>
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-xs uppercase text-stone-400">Selected city</p>
-                    <h2 className="mt-1 text-xl font-semibold">{active.name}</h2>
-                    <p className="text-sm text-aqua">@{active.login}</p>
+                    <h2 className="mt-1 break-words text-lg font-semibold sm:text-xl">{active.name}</h2>
+                    <p className="break-words text-sm text-aqua">@{active.login}</p>
                   </div>
                   <a
                     href={active.htmlUrl}
@@ -623,13 +636,13 @@ export default function Home() {
                 <p className="mt-3 line-clamp-2 text-sm leading-5 text-stone-300">
                   {active.bio ?? "This public GitHub city is generated from repositories and languages."}
                 </p>
-                <div className="mt-3 flex gap-4 text-xs text-stone-300">
-                  <span className="flex items-center gap-1">
-                    <Building2 className="h-3.5 w-3.5 text-copper" /> {active.publicRepos} repos
+                <div className="mt-3 flex flex-wrap gap-2 text-xs text-stone-300">
+                  <span className="flex items-center gap-1 rounded border border-white/10 bg-white/[0.04] px-2 py-1">
+                    <Building2 className="h-3.5 w-3.5 shrink-0 text-copper" /> {active.publicRepos} repos
                   </span>
-                  <span>{active.followers.toLocaleString()} followers</span>
+                  <span className="rounded border border-white/10 bg-white/[0.04] px-2 py-1">{active.followers.toLocaleString()} followers</span>
                 </div>
-                <p className="mt-3 truncate border-t border-white/10 pt-3 text-xs text-stone-400">
+                <p className="mt-3 break-words border-t border-white/10 pt-3 text-xs text-stone-400">
                   Inspecting: {selected}
                 </p>
               </>
@@ -729,7 +742,7 @@ function ProfileLink({
 }) {
   if (!href) {
     return (
-      <span className="flex items-center justify-center gap-1 rounded-md border border-white/10 bg-white/[0.03] px-3 py-2 text-stone-500">
+      <span className="flex min-w-0 items-center justify-center gap-1 rounded-md border border-white/10 bg-white/[0.03] px-3 py-2 text-stone-500">
         {icon} {label}
       </span>
     );
@@ -740,7 +753,7 @@ function ProfileLink({
       href={href}
       target="_blank"
       rel="noreferrer"
-      className="flex items-center justify-center gap-1 rounded-md border border-aqua/30 bg-aqua/10 px-3 py-2 text-aqua transition hover:bg-aqua/20 hover:text-white"
+      className="flex min-w-0 items-center justify-center gap-1 rounded-md border border-aqua/30 bg-aqua/10 px-3 py-2 text-aqua transition hover:bg-aqua/20 hover:text-white"
     >
       {icon} {label}
     </a>

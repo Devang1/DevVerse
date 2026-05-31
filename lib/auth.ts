@@ -51,6 +51,7 @@ const FRIEND_DATA_PATH = path.join(process.cwd(), "data", "friends.json");
 const COOKIE_NAME = "devverse_session";
 const TOKEN_MAX_AGE = 60 * 60 * 24 * 14;
 const DATABASE_URL = process.env.DATABASE_URL;
+const isProduction = process.env.NODE_ENV === "production";
 
 let pool: Pool | null = null;
 let schemaReady: Promise<void> | null = null;
@@ -81,6 +82,10 @@ function getPool() {
     ssl: process.env.POSTGRES_SSL === "true" ? { rejectUnauthorized: false } : undefined
   });
   return pool;
+}
+
+export function getDatabasePool() {
+  return getPool();
 }
 
 async function ensureSchema() {
@@ -119,8 +124,18 @@ async function ensureSchema() {
     );
     ALTER TABLE devverse_friendships
       ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'accepted';
+
+    CREATE TABLE IF NOT EXISTS devverse_github_city_cache (
+      username TEXT PRIMARY KEY,
+      city JSONB NOT NULL,
+      fetched_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
   `).then(() => undefined);
   await schemaReady;
+}
+
+export async function ensureDatabaseSchema() {
+  await ensureSchema();
 }
 
 type UserRow = {
@@ -192,6 +207,7 @@ async function readUsers(): Promise<StoredUser[]> {
 
 async function writeUsers(users: StoredUser[]) {
   if (getPool()) throw new Error("writeUsers is only available for local JSON storage.");
+  if (isProduction) throw new Error("Set DATABASE_URL in production. Local JSON storage is development-only.");
   await mkdir(path.dirname(DATA_PATH), { recursive: true });
   await writeFile(DATA_PATH, JSON.stringify(users, null, 2), "utf8");
 }
@@ -205,6 +221,7 @@ async function readMessages(): Promise<ChatMessage[]> {
 }
 
 async function writeMessages(messages: ChatMessage[]) {
+  if (isProduction && !getPool()) throw new Error("Set DATABASE_URL in production. Local JSON storage is development-only.");
   await mkdir(path.dirname(CHAT_DATA_PATH), { recursive: true });
   await writeFile(CHAT_DATA_PATH, JSON.stringify(messages, null, 2), "utf8");
 }
@@ -222,6 +239,7 @@ async function readFriendships(): Promise<Friendship[]> {
 }
 
 async function writeFriendships(friendships: Friendship[]) {
+  if (isProduction && !getPool()) throw new Error("Set DATABASE_URL in production. Local JSON storage is development-only.");
   await mkdir(path.dirname(FRIEND_DATA_PATH), { recursive: true });
   await writeFile(FRIEND_DATA_PATH, JSON.stringify(friendships, null, 2), "utf8");
 }
