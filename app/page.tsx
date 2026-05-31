@@ -36,6 +36,7 @@ export default function Home() {
   const setLoading = useKingdomStore((state) => state.setLoading);
   const setError = useKingdomStore((state) => state.setError);
   const setSelectedRepo = useKingdomStore((state) => state.setSelectedRepo);
+  const setMobileMove = useKingdomStore((state) => state.setMobileMove);
 
   const active = useMemo(
     () => cities.find((city) => city.login === activeCity) ?? cities[0],
@@ -212,30 +213,29 @@ export default function Home() {
         </Canvas>
       </div>
 
-      <header className="pointer-events-none absolute inset-x-0 top-0 z-10 p-3 sm:p-5">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-start justify-between gap-3">
+      <header className="pointer-events-none absolute inset-x-0 top-0 z-10 p-2 sm:p-5">
+        <div className="mx-auto flex max-w-7xl flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between sm:gap-3">
           <motion.div
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            className="glass-panel pointer-events-auto flex items-center gap-3 rounded-lg px-4 py-3"
+            className="glass-panel pointer-events-auto flex items-center gap-2 rounded-lg px-3 py-2 sm:gap-3 sm:px-4 sm:py-3"
           >
-            <div className="grid h-9 w-9 place-items-center rounded-md bg-copper text-lg font-bold">D</div>
-            <img src="/logo.png" alt="DevVerse logo" className="h-9 w-9 rounded-md object-cover" />
-            <div>
-              <h1 className="text-lg font-semibold">DevVerse World</h1>
-              <p className="text-xs text-stone-300">Live cities generated from public GitHub data</p>
+            <img src="/logo.png" alt="DevVerse logo" className="h-8 w-8 shrink-0 rounded-md object-cover sm:h-9 sm:w-9" />
+            <div className="min-w-0">
+              <h1 className="truncate text-base font-semibold sm:text-lg">DevVerse World</h1>
+              <p className="hidden text-xs text-stone-300 sm:block">Live cities generated from public GitHub data</p>
             </div>
           </motion.div>
 
-          <div className="flex gap-2">
-          <form onSubmit={handleSearch} className="glass-panel pointer-events-auto flex rounded-lg p-1">
+          <div className="grid grid-cols-[1fr_auto_auto] gap-2 sm:flex">
+          <form onSubmit={handleSearch} className="glass-panel pointer-events-auto flex min-w-0 rounded-lg p-1">
             <label className="sr-only" htmlFor="github-user">GitHub username</label>
             <input
               id="github-user"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Find a GitHub city"
-              className="w-44 bg-transparent px-3 text-sm text-white outline-none placeholder:text-stone-400 sm:w-60"
+              className="min-w-0 flex-1 bg-transparent px-3 text-sm text-white outline-none placeholder:text-stone-400 sm:w-60"
             />
             <button
               type="submit"
@@ -248,10 +248,11 @@ export default function Home() {
           </form>
           <button
             onClick={() => setMessagesOpen(true)}
-            className="glass-panel pointer-events-auto flex h-11 items-center gap-2 rounded-lg px-3 text-sm transition hover:bg-black/70"
+            className="glass-panel pointer-events-auto flex h-11 items-center justify-center gap-2 rounded-lg px-3 text-sm transition hover:bg-black/70"
+            aria-label="Open messages"
           >
             <MessageCircle className="h-4 w-4 text-aqua" />
-            Messages
+            <span className="hidden sm:inline">Messages</span>
             {friendRequests.length > 0 && (
               <span className="rounded-full bg-copper px-1.5 py-0.5 text-[10px] font-semibold text-white">
                 {friendRequests.length}
@@ -264,8 +265,8 @@ export default function Home() {
       </header>
 
       {messagesOpen && (
-        <div className="pointer-events-auto fixed inset-0 z-30 grid place-items-center bg-black/45 p-4">
-          <div className="glass-panel flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg">
+        <div className="pointer-events-auto fixed inset-0 z-30 grid place-items-center bg-black/45 p-2 sm:p-4">
+          <div className="glass-panel flex max-h-[92dvh] w-full max-w-3xl flex-col overflow-hidden rounded-lg">
             <div className="flex items-center justify-between border-b border-white/10 p-4">
               <div>
                 <h2 className="text-lg font-semibold">Messages</h2>
@@ -411,7 +412,9 @@ export default function Home() {
         </div>
       </aside>
 
-      <section className="pointer-events-none absolute inset-x-0 bottom-0 z-10 p-3 sm:p-5">
+      <MobileMovementControls onMove={setMobileMove} />
+
+      <section className="pointer-events-none absolute inset-x-0 bottom-0 z-10 p-2 pb-[8.25rem] sm:p-5">
         <div className="mx-auto flex max-w-7xl items-end justify-end gap-3 sm:pl-72">
           <div className="glass-panel pointer-events-auto hidden rounded-lg px-4 py-3 text-sm text-stone-200 lg:block">
             <div className="mb-1 flex items-center gap-2 text-xs uppercase text-stone-400">
@@ -426,7 +429,7 @@ export default function Home() {
             key={active?.login ?? "loading"}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="glass-panel pointer-events-auto w-full max-w-sm rounded-lg p-4"
+            className="glass-panel pointer-events-auto max-h-[34dvh] w-full overflow-auto rounded-lg p-3 sm:max-h-[72dvh] sm:max-w-sm sm:p-4"
           >
             {selectedRepo ? (
               <>
@@ -648,6 +651,71 @@ export default function Home() {
 
 function friendName(user: PublicUser) {
   return user.profile.displayName || user.profile.githubUsername || user.email;
+}
+
+function MobileMovementControls({
+  onMove
+}: {
+  onMove: (mobileMove: { x: number; z: number; running?: boolean }) => void;
+}) {
+  const stopMoving = () => onMove({ x: 0, z: 0, running: false });
+  const startMoving = (x: number, z: number, running = false) => {
+    onMove({ x, z, running });
+  };
+
+  return (
+    <div className="pointer-events-none absolute bottom-3 left-3 z-20 grid grid-cols-3 gap-2 sm:hidden">
+      <div />
+      <MoveButton label="Move forward" onStart={() => startMoving(0, -1)} onStop={stopMoving}>
+        ^
+      </MoveButton>
+      <div />
+      <MoveButton label="Move left" onStart={() => startMoving(-1, 0)} onStop={stopMoving}>
+        &lt;
+      </MoveButton>
+      <MoveButton label="Run forward" onStart={() => startMoving(0, -1, true)} onStop={stopMoving}>
+        Run
+      </MoveButton>
+      <MoveButton label="Move right" onStart={() => startMoving(1, 0)} onStop={stopMoving}>
+        &gt;
+      </MoveButton>
+      <div />
+      <MoveButton label="Move backward" onStart={() => startMoving(0, 1)} onStop={stopMoving}>
+        v
+      </MoveButton>
+      <div />
+    </div>
+  );
+}
+
+function MoveButton({
+  children,
+  label,
+  onStart,
+  onStop
+}: {
+  children: ReactNode;
+  label: string;
+  onStart: () => void;
+  onStop: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      className="pointer-events-auto grid h-12 w-12 select-none place-items-center rounded-lg border border-white/15 bg-black/55 text-sm font-semibold text-white shadow-lg backdrop-blur-md active:scale-95 active:bg-copper"
+      onPointerDown={(event) => {
+        event.currentTarget.setPointerCapture(event.pointerId);
+        onStart();
+      }}
+      onPointerUp={onStop}
+      onPointerCancel={onStop}
+      onPointerLeave={onStop}
+      onContextMenu={(event) => event.preventDefault()}
+    >
+      {children}
+    </button>
+  );
 }
 
 function ProfileLink({

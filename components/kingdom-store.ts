@@ -7,6 +7,7 @@ type KingdomState = {
   selected: string;
   selectedRepo: GitHubRepo | null;
   selectedCity: DeveloperCity | null;
+  mobileMove: { x: number; z: number; running: boolean };
   isLoading: boolean;
   error: string | null;
   setCities: (cities: DeveloperCity[]) => void;
@@ -14,6 +15,7 @@ type KingdomState = {
   setSelected: (selected: string) => void;
   setSelectedRepo: (selectedRepo: GitHubRepo | null) => void;
   setSelectedCity: (selectedCity: DeveloperCity | null) => void;
+  setMobileMove: (mobileMove: { x: number; z: number; running?: boolean }) => void;
   setLoading: (isLoading: boolean) => void;
   setError: (error: string | null) => void;
 };
@@ -24,6 +26,7 @@ export const useKingdomStore = create<KingdomState>((set) => ({
   selected: "World map",
   selectedRepo: null,
   selectedCity: null,
+  mobileMove: { x: 0, z: 0, running: false },
   isLoading: true,
   error: null,
   setCities: (cities) =>
@@ -42,6 +45,14 @@ export const useKingdomStore = create<KingdomState>((set) => ({
       activeCity: selectedCity?.login ?? null,
       selected: selectedCity ? `${selectedCity.name} city hall` : "World map"
     }),
+  setMobileMove: (mobileMove) =>
+    set((state) => ({
+      mobileMove: {
+        x: mobileMove.x,
+        z: mobileMove.z,
+        running: mobileMove.running ?? state.mobileMove.running
+      }
+    })),
   setLoading: (isLoading) => set({ isLoading }),
   setError: (error) => set({ error })
 }));

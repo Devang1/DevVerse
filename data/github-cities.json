@@ -1,0 +1,204 @@
+{
+  "devang1": {
+    "login": "Devang1",
+    "name": "Devang kishore Shukla",
+    "avatarUrl": "https://avatars.githubusercontent.com/u/115930424?v=4",
+    "htmlUrl": "https://github.com/Devang1",
+    "bio": null,
+    "company": null,
+    "location": null,
+    "followers": 2,
+    "publicRepos": 19,
+    "totalStars": 1,
+    "topLanguages": [
+      "JavaScript",
+      "TypeScript",
+      "CSS"
+    ],
+    "repos": [
+      {
+        "id": 1142007682,
+        "name": "buildKaro",
+        "description": "BuildKaro.ai is an AI-powered web application that allows users to generate modern, responsive websites instantly by simply describing their idea in natural language. The platform provides a complete workflow — from prompt-based website creation to live preview, iterative editing, deployment, and React project export.",
+        "htmlUrl": "https://github.com/Devang1/buildKaro",
+        "language": "JavaScript",
+        "stars": 1,
+        "forks": 0
+      },
+      {
+        "id": 1025650225,
+        "name": "code-chef-BVCOE",
+        "description": null,
+        "htmlUrl": "https://github.com/Devang1/code-chef-BVCOE",
+        "language": "TypeScript",
+        "stars": 0,
+        "forks": 1
+      },
+      {
+        "id": 1234101279,
+        "name": "AI-Resume-analyser",
+        "description": "AI Resume Analyzer is a modern React Native mobile application that helps users evaluate and improve their resumes using AI-powered analysis. Users can upload their resume PDF and instantly receive an ATS score, skill analysis, keyword optimization feedback, strengths, weaknesses, and personalized improvement suggestions.",
+        "htmlUrl": "https://github.com/Devang1/AI-Resume-analyser",
+        "language": "JavaScript",
+        "stars": 0,
+        "forks": 0
+      },
+      {
+        "id": 910246692,
+        "name": "blog",
+        "description": "blog project",
+        "htmlUrl": "https://github.com/Devang1/blog",
+        "language": "CSS",
+        "stars": 0,
+        "forks": 0
+      },
+      {
+        "id": 1040303167,
+        "name": "BVCOE-TalkZone",
+        "description": null,
+        "htmlUrl": "https://github.com/Devang1/BVCOE-TalkZone",
+        "language": "JavaScript",
+        "stars": 0,
+        "forks": 0
+      },
+      {
+        "id": 949421930,
+        "name": "chitchat",
+        "description": "chatting website ",
+        "htmlUrl": "https://github.com/Devang1/chitchat",
+        "language": "JavaScript",
+        "stars": 0,
+        "forks": 0
+      },
+      {
+        "id": 1172732986,
+        "name": "Devang1",
+        "description": "this is my prodile",
+        "htmlUrl": "https://github.com/Devang1/Devang1",
+        "language": null,
+        "stars": 0,
+        "forks": 0
+      },
+      {
+        "id": 1255393762,
+        "name": "DevVerse",
+        "description": "DevVerse is a 3D developer metaverse where GitHub profiles become interactive kingdoms. Showcase projects as buildings, explore other developers' worlds, customize your avatar, and grow your coding empire through social and gamified experiences.",
+        "htmlUrl": "https://github.com/Devang1/DevVerse",
+        "language": "TypeScript",
+        "stars": 0,
+        "forks": 0
+      },
+      {
+        "id": 1202266776,
+        "name": "Finance-Dashboard-UI",
+        "description": null,
+        "htmlUrl": "https://github.com/Devang1/Finance-Dashboard-UI",
+        "language": "TypeScript",
+        "stars": 0,
+        "forks": 0
+      },
+      {
+        "id": 1005099451,
+        "name": "geer-intern-assignment",
+        "description": "It is assignment project for internship",
+        "htmlUrl": "https://github.com/Devang1/geer-intern-assignment",
+        "language": "JavaScript",
+        "stars": 0,
+        "forks": 0
+      },
+      {
+        "id": 1070148806,
+        "name": "growmeorganic",
+        "description": null,
+        "htmlUrl": "https://github.com/Devang1/growmeorganic",
+        "language": "TypeScript",
+        "stars": 0,
+        "forks": 0
+      },
+      {
+        "id": 1010471797,
+        "name": "growmytherapy-assigment",
+        "description": "it a an assignment website for an internship",
+        "htmlUrl": "https://github.com/Devang1/growmytherapy-assigment",
+        "language": "JavaScript",
+        "stars": 0,
+        "forks": 0
+      },
+      {
+        "id": 1234510121,
+        "name": "HybridMesh",
+        "description": "A modern hybrid messaging platform built with Expo + React Native that combines realtime cloud messaging with offline-first mesh communication.",
+        "htmlUrl": "https://github.com/Devang1/HybridMesh",
+        "language": "TypeScript",
+        "stars": 0,
+        "forks": 0
+      },
+      {
+        "id": 1029226652,
+        "name": "istich-secondary",
+        "description": null,
+        "htmlUrl": "https://github.com/Devang1/istich-secondary",
+        "language": "JavaScript",
+        "stars": 0,
+        "forks": 0
+      },
+      {
+        "id": 1227883407,
+        "name": "lms-project",
+        "description": null,
+        "htmlUrl": "https://github.com/Devang1/lms-project",
+        "language": "TypeScript",
+        "stars": 0,
+        "forks": 0
+      },
+      {
+        "id": 1136886051,
+        "name": "portfolio",
+        "description": "portfolio website",
+        "htmlUrl": "https://github.com/Devang1/portfolio",
+        "language": "JavaScript",
+        "stars": 0,
+        "forks": 0
+      },
+      {
+        "id": 970226562,
+        "name": "safe-route",
+        "description": "it is website which provides safest route",
+        "htmlUrl": "https://github.com/Devang1/safe-route",
+        "language": "JavaScript",
+        "stars": 0,
+        "forks": 0
+      },
+      {
+        "id": 987504879,
+        "name": "social-media",
+        "description": null,
+        "htmlUrl": "https://github.com/Devang1/social-media",
+        "language": "JavaScript",
+        "stars": 0,
+        "forks": 0
+      },
+      {
+        "id": 1186241649,
+        "name": "XAI-cybersecurity",
+        "description": "this is ml model which detect where any apk has malware or not and use xai to explain the reason",
+        "htmlUrl": "https://github.com/Devang1/XAI-cybersecurity",
+        "language": "JavaScript",
+        "stars": 0,
+        "forks": 0
+      }
+    ],
+    "registeredProfile": {
+      "userId": "eab0e0014e609d46af3eb8a4",
+      "displayName": "Devang",
+      "githubUsername": "devang1",
+      "bio": "",
+      "location": "",
+      "portfolioUrl": "https://www.devang.fun/",
+      "linkedinUrl": "",
+      "leetcodeUrl": "",
+      "codechefUrl": "",
+      "hackerrankUrl": ""
+    }
+  }
+}

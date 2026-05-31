@@ -471,6 +471,7 @@ function Player({ cities, positions }: { cities: DeveloperCity[]; positions: [nu
   const velocity = useRef(new Vector3());
   const { camera } = useThree();
   const activeCity = useKingdomStore((state) => state.activeCity);
+  const mobileMove = useKingdomStore((state) => state.mobileMove);
   const setSelected = useKingdomStore((state) => state.setSelected);
   const collisionCircles = useMemo(() => cityCollisionCircles(cities, positions), [cities, positions]);
 
@@ -495,14 +496,16 @@ function Player({ cities, positions }: { cities: DeveloperCity[]; positions: [nu
 
   useFrame((_, delta) => {
     if (!player.current) return;
-    const input = new Vector3(
+    const keyboardInput = new Vector3(
       Number(Boolean(keys.current.d || keys.current.arrowright)) -
         Number(Boolean(keys.current.a || keys.current.arrowleft)),
       0,
       Number(Boolean(keys.current.s || keys.current.arrowdown)) -
         Number(Boolean(keys.current.w || keys.current.arrowup))
     );
-    const speed = keys.current.shift ? 8 : 4.8;
+    const mobileInput = new Vector3(mobileMove.x, 0, mobileMove.z);
+    const input = keyboardInput.lengthSq() > 0 ? keyboardInput : mobileInput;
+    const speed = keys.current.shift || mobileMove.running ? 8 : 4.8;
     if (input.lengthSq() > 0) input.normalize().multiplyScalar(speed);
     velocity.current.lerp(input, 1 - Math.exp(-delta * (input.lengthSq() ? 9 : 13)));
     const next = player.current.position.clone().addScaledVector(velocity.current, delta);
