@@ -979,67 +979,72 @@ function MobileMovementControls({
 }: {
   onMove: (mobileMove: { x: number; z: number; running?: boolean }) => void;
 }) {
-  const lastTap = useRef<{ key: string; at: number }>({ key: "", at: 0 });
-  const stopMoving = () => onMove({ x: 0, z: 0, running: false });
-  const startMoving = (key: string, x: number, z: number, running = false) => {
-    const now = Date.now();
-    const doubleTapRun = lastTap.current.key === key && now - lastTap.current.at < 320;
-    lastTap.current = { key, at: now };
-    onMove({ x, z, running: running || doubleTapRun });
+  const baseRef = useRef<HTMLDivElement>(null);
+  const [thumb, setThumb] = useState({ x: 0, y: 0, active: false, running: false });
+  const maxRadius = 42;
+
+  const stopMoving = () => {
+    setThumb({ x: 0, y: 0, active: false, running: false });
+    onMove({ x: 0, z: 0, running: false });
+  };
+
+  const updateJoystick = (event: PointerEvent<HTMLDivElement>) => {
+    const base = baseRef.current;
+    if (!base) return;
+    const rect = base.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const rawX = event.clientX - centerX;
+    const rawY = event.clientY - centerY;
+    const distance = Math.min(maxRadius, Math.hypot(rawX, rawY));
+    const angle = Math.atan2(rawY, rawX);
+    const x = Math.cos(angle) * distance;
+    const y = Math.sin(angle) * distance;
+    const strength = distance / maxRadius;
+    const running = strength > 0.72;
+
+    setThumb({ x, y, active: true, running });
+    onMove({
+      x: strength < 0.12 ? 0 : x / maxRadius,
+      z: strength < 0.12 ? 0 : y / maxRadius,
+      running
+    });
   };
 
   return (
-    <div className="pointer-events-none absolute bottom-3 left-3 z-20 grid grid-cols-3 gap-2 sm:hidden">
-      <div />
-      <MoveButton label="Move forward" onStart={() => startMoving("forward", 0, -1)} onStop={stopMoving}>
-        ^
-      </MoveButton>
-      <div />
-      <MoveButton label="Move left" onStart={() => startMoving("left", -1, 0)} onStop={stopMoving}>
-        &lt;
-      </MoveButton>
-      <MoveButton label="Run forward" onStart={() => startMoving("forward", 0, -1, true)} onStop={stopMoving}>
-        Run
-      </MoveButton>
-      <MoveButton label="Move right" onStart={() => startMoving("right", 1, 0)} onStop={stopMoving}>
-        &gt;
-      </MoveButton>
-      <div />
-      <MoveButton label="Move backward" onStart={() => startMoving("backward", 0, 1)} onStop={stopMoving}>
-        v
-      </MoveButton>
-      <div />
-    </div>
-  );
-}
-
-function MoveButton({
-  children,
-  label,
-  onStart,
-  onStop
-}: {
-  children: ReactNode;
-  label: string;
-  onStart: () => void;
-  onStop: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      className="pointer-events-auto grid h-12 w-12 select-none place-items-center rounded-lg border border-white/15 bg-black/55 text-sm font-semibold text-white shadow-lg backdrop-blur-md active:scale-95 active:bg-copper"
+    <div className="pointer-events-none absolute bottom-3 left-3 z-20 sm:hidden">
+      <div
+        ref={baseRef}
+        className="pointer-events-auto relative h-32 w-32 touch-none select-none rounded-full border border-white/15 bg-black/45 shadow-2xl backdrop-blur-md"
+        role="application"
+        aria-label="Movement joystick"
       onPointerDown={(event) => {
         event.currentTarget.setPointerCapture(event.pointerId);
-        onStart();
+          updateJoystick(event);
       }}
-      onPointerUp={onStop}
-      onPointerCancel={onStop}
-      onPointerLeave={onStop}
+        onPointerMove={(event) => {
+          if (thumb.active) updateJoystick(event);
+        }}
+        onPointerUp={stopMoving}
+        onPointerCancel={stopMoving}
+        onPointerLeave={stopMoving}
       onContextMenu={(event) => event.preventDefault()}
     >
-      {children}
-    </button>
+        <div className="absolute left-1/2 top-1/2 h-px w-20 -translate-x-1/2 bg-white/15" />
+        <div className="absolute left-1/2 top-1/2 h-20 w-px -translate-y-1/2 bg-white/15" />
+        <div className="absolute inset-5 rounded-full border border-white/10" />
+        <div
+          className={`absolute left-1/2 top-1/2 grid h-14 w-14 place-items-center rounded-full border text-[10px] font-semibold uppercase tracking-wide shadow-xl transition-colors ${
+            thumb.running
+              ? "border-copper bg-copper text-white"
+              : "border-aqua/40 bg-aqua/20 text-aqua"
+          }`}
+          style={{ transform: `translate(calc(-50% + ${thumb.x}px), calc(-50% + ${thumb.y}px))` }}
+        >
+          {thumb.running ? "Run" : "Move"}
+        </div>
+      </div>
+    </div>
   );
 }
 
