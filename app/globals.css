@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --font-inter: "Inter";
+  background: #081014;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  background: #081014;
+  color: #f6f3eb;
+}
+
+body {
+  overflow: hidden;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.glass-panel {
+  background: rgba(9, 18, 22, 0.72);
+  border: 1px solid rgba(246, 243, 235, 0.13);
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(18px);
+}
+
+.hud-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 999px;
+  border: 1px solid rgba(246, 243, 235, 0.14);
+  background: rgba(246, 243, 235, 0.08);
+  color: #f6f3eb;
+  transition: transform 160ms ease, background 160ms ease, border-color 160ms ease;
+}
+
+.hud-button:hover {
+  transform: translateY(-1px);
+  background: rgba(246, 243, 235, 0.15);
+  border-color: rgba(246, 243, 235, 0.28);
+}
