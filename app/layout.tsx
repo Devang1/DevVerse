@@ -3,7 +3,10 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "DevVerse",
-  description: "An interactive developer kingdom generated from coding activity."
+  description: "An interactive developer kingdom generated from coding activity.",
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({
