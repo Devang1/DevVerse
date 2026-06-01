@@ -26,7 +26,6 @@ const repoColors = ["#c96b3c", "#4f8b83", "#456990", "#d6a43f", "#845b8e", "#6b8
 const CITY_PLAZA_RADIUS = 6.2;
 const CITY_ROAD_HALF_WIDTH = 2.3;
 const REPO_BLOCK_SPACING = 4.75;
-const MAX_RENDERED_REPOS = 32;
 
 function displayRepoName(name: string) {
   return name.length > 18 ? `${name.slice(0, 16)}...` : name;
@@ -37,7 +36,7 @@ function repoMeta(repo: GitHubRepo) {
 }
 
 function visibleRepos(city: DeveloperCity) {
-  return city.repos.slice(0, MAX_RENDERED_REPOS);
+  return city.repos;
 }
 
 function isEditableTarget(target: EventTarget | null) {

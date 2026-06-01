@@ -1,6 +1,6 @@
 "use client";
 
-import { LogIn, LogOut, Save, UserRound, X } from "lucide-react";
+import { CheckSquare, LogIn, LogOut, Save, Square, UserRound, X } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
 import type { DeveloperProfile, PublicUser } from "@/lib/auth";
 
@@ -13,7 +13,16 @@ const emptyProfile: DeveloperProfile = {
   linkedinUrl: "",
   leetcodeUrl: "",
   codechefUrl: "",
-  hackerrankUrl: ""
+  hackerrankUrl: "",
+  repoSelectionMode: "all",
+  selectedRepoIds: []
+};
+
+type SelectableRepo = {
+  id: number;
+  name: string;
+  language: string | null;
+  stars: number;
 };
 
 export function AccountPanel({
@@ -29,6 +38,8 @@ export function AccountPanel({
   const [error, setError] = useState("");
   const [form, setForm] = useState({ email: "", password: "", displayName: "", githubUsername: "" });
   const [profile, setProfile] = useState(emptyProfile);
+  const [repos, setRepos] = useState<SelectableRepo[]>([]);
+  const [reposLoading, setReposLoading] = useState(false);
 
   useEffect(() => {
     void fetch("/api/profile").then((response) => response.json()).then(({ user: sessionUser }) => {
@@ -73,6 +84,44 @@ export function AccountPanel({
     setOpen(false);
   }
 
+  async function loadRepos() {
+    if (!profile.githubUsername.trim()) return;
+    setReposLoading(true);
+    setError("");
+    try {
+      const response = await fetch(`/api/github-repos?user=${encodeURIComponent(profile.githubUsername.trim())}`);
+      const data = await response.json();
+      if (!response.ok) {
+        setError(data.error ?? "Could not load repositories.");
+        return;
+      }
+      setRepos(data.repos ?? []);
+    } catch {
+      setError("Could not load repositories.");
+    } finally {
+      setReposLoading(false);
+    }
+  }
+
+  function toggleRepo(repoId: number) {
+    const selected = new Set(
+      profile.repoSelectionMode === "all"
+        ? repos.map((repo) => repo.id)
+        : profile.selectedRepoIds
+    );
+    if (selected.has(repoId)) selected.delete(repoId);
+    else selected.add(repoId);
+    setProfile({
+      ...profile,
+      repoSelectionMode: "selected",
+      selectedRepoIds: Array.from(selected)
+    });
+  }
+
+  function selectAllRepos() {
+    setProfile({ ...profile, repoSelectionMode: "all", selectedRepoIds: [] });
+  }
+
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
     setUser(null);
@@ -111,6 +160,50 @@ export function AccountPanel({
                 <ProfileInput label="CodeChef URL" value={profile.codechefUrl} onChange={(value) => setProfile({ ...profile, codechefUrl: value })} />
                 <ProfileInput label="HackerRank URL" value={profile.hackerrankUrl} onChange={(value) => setProfile({ ...profile, hackerrankUrl: value })} />
                 <label className="block text-xs text-stone-300">Bio<textarea value={profile.bio} onChange={(event) => setProfile({ ...profile, bio: event.target.value })} className="mt-1 min-h-20 w-full rounded-md border border-white/10 bg-white/[0.06] px-3 py-2 text-sm text-white outline-none focus:border-aqua" /></label>
+                <div className="rounded-md border border-white/10 bg-white/[0.04] p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium text-white">Repository buildings</p>
+                      <p className="text-xs text-stone-400">Choose which repos appear in your city.</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button type="button" onClick={loadRepos} className="rounded-md border border-aqua/30 bg-aqua/10 px-3 py-1.5 text-xs font-medium text-aqua transition hover:bg-aqua/20 hover:text-white">
+                        {reposLoading ? "Loading..." : "Load repos"}
+                      </button>
+                      <button type="button" onClick={selectAllRepos} className="rounded-md bg-copper px-3 py-1.5 text-xs font-medium text-white transition hover:bg-[#e38a46]">
+                        Select all
+                      </button>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-xs text-stone-400">
+                    {profile.repoSelectionMode === "all"
+                      ? "All fetched public repositories will be shown as buildings."
+                      : `${profile.selectedRepoIds.length} selected repositories will be shown.`}
+                  </p>
+                  {repos.length > 0 && (
+                    <div className="mt-3 max-h-48 space-y-1 overflow-auto pr-1">
+                      {repos.map((repo) => {
+                        const checked = profile.repoSelectionMode === "all" || profile.selectedRepoIds.includes(repo.id);
+                        return (
+                          <button
+                            key={repo.id}
+                            type="button"
+                            onClick={() => toggleRepo(repo.id)}
+                            className={`flex w-full items-center gap-2 rounded-md border px-2 py-2 text-left transition ${
+                              checked ? "border-aqua/40 bg-aqua/10" : "border-white/10 bg-black/10 hover:bg-white/[0.06]"
+                            }`}
+                          >
+                            {checked ? <CheckSquare className="h-4 w-4 shrink-0 text-aqua" /> : <Square className="h-4 w-4 shrink-0 text-stone-500" />}
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm text-white">{repo.name}</span>
+                              <span className="block truncate text-xs text-stone-400">{repo.language ?? "Mixed"} · {repo.stars.toLocaleString()} stars</span>
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
                 {error && <p className="text-sm text-red-200">{error}</p>}
                 <div className="flex justify-between gap-2 pt-2">
                   <button type="button" onClick={logout} className="flex items-center gap-2 text-sm text-stone-300 hover:text-white"><LogOut className="h-4 w-4" /> Log out</button>

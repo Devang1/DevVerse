@@ -13,6 +13,8 @@ export type DeveloperProfile = {
   leetcodeUrl: string;
   codechefUrl: string;
   hackerrankUrl: string;
+  repoSelectionMode: "all" | "selected";
+  selectedRepoIds: number[];
 };
 
 type StoredUser = {
@@ -66,7 +68,11 @@ function normalizeProfile(profile: Partial<DeveloperProfile>): DeveloperProfile 
     linkedinUrl: profile.linkedinUrl ?? "",
     leetcodeUrl: profile.leetcodeUrl ?? "",
     codechefUrl: profile.codechefUrl ?? "",
-    hackerrankUrl: profile.hackerrankUrl ?? ""
+    hackerrankUrl: profile.hackerrankUrl ?? "",
+    repoSelectionMode: profile.repoSelectionMode === "selected" ? "selected" : "all",
+    selectedRepoIds: Array.isArray(profile.selectedRepoIds)
+      ? profile.selectedRepoIds.map(Number).filter(Number.isFinite)
+      : []
   };
 }
 
@@ -359,7 +365,9 @@ export async function registerUser(input: {
       linkedinUrl: "",
       leetcodeUrl: "",
       codechefUrl: "",
-      hackerrankUrl: ""
+      hackerrankUrl: "",
+      repoSelectionMode: "all",
+      selectedRepoIds: []
     }
   };
   const db = getPool();

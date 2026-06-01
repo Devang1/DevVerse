@@ -42,7 +42,6 @@ const headers = {
 };
 
 const REQUEST_TIMEOUT_MS = 8000;
-const MAX_REPOS_PER_CITY = 32;
 const CITY_CACHE_TTL_MS = 1000 * 60 * 15;
 
 type CachedCityRow = {
@@ -69,14 +68,43 @@ function trimCityForWorld(city: DeveloperCity): DeveloperCity {
         repoScore(b) - repoScore(a) ||
         b.stars - a.stars ||
         a.name.localeCompare(b.name)
-    )
-    .slice(0, MAX_REPOS_PER_CITY);
+    );
 
   return {
     ...city,
     repos,
     totalStars: city.repos.reduce((total, repo) => total + repo.stars, 0),
   };
+}
+
+function languageSummary(repos: GitHubRepo[]) {
+  const languageCounts = repos
+    .map((repo) => repo.language)
+    .filter((language): language is string => Boolean(language))
+    .reduce<Record<string, number>>((counts, language) => {
+      counts[language] = (counts[language] ?? 0) + 1;
+      return counts;
+    }, {});
+
+  return Object.entries(languageCounts)
+    .sort(([, countA], [, countB]) => countB - countA)
+    .slice(0, 4)
+    .map(([language]) => language);
+}
+
+function applyRepoSelection(city: DeveloperCity): DeveloperCity {
+  const profile = city.registeredProfile;
+  const selectedRepos =
+    profile?.repoSelectionMode === "selected"
+      ? city.repos.filter((repo) => profile.selectedRepoIds.includes(repo.id))
+      : city.repos;
+
+  return trimCityForWorld({
+    ...city,
+    repos: selectedRepos,
+    totalStars: selectedRepos.reduce((total, repo) => total + repo.stars, 0),
+    topLanguages: languageSummary(selectedRepos)
+  });
 }
 
 function cacheKey(username: string) {
@@ -163,18 +191,6 @@ async function fetchCity(username: string): Promise<DeveloperCity | null> {
         forks: repo.forks_count,
       }));
 
-    const languages = rawRepos
-      .map((repo) => repo.language)
-      .filter((language): language is string => Boolean(language));
-
-    const languageCounts = languages.reduce<Record<string, number>>(
-      (counts, language) => {
-        counts[language] = (counts[language] ?? 0) + 1;
-        return counts;
-      },
-      {}
-    );
-
     const registeredProfile =
       await findRegisteredProfileByGithubUsername(user.login);
 
@@ -189,10 +205,7 @@ async function fetchCity(username: string): Promise<DeveloperCity | null> {
       followers: user.followers,
       publicRepos: user.public_repos,
       totalStars: repos.reduce((total, repo) => total + repo.stars, 0),
-      topLanguages: Object.entries(languageCounts)
-        .sort(([, countA], [, countB]) => countB - countA)
-        .slice(0, 4)
-        .map(([language]) => language),
+      topLanguages: languageSummary(repos),
       repos,
       registeredProfile,
     });
@@ -253,9 +266,10 @@ export async function GET(request: NextRequest) {
         .map(trimCityForWorld)
         .map(attachRegisteredProfile)
     );
+    const selectedCities = cities.map(applyRepoSelection);
 
     const response: WorldResponse = {
-      cities,
+      cities: selectedCities,
       fetchedAt: new Date().toISOString(),
     };
 

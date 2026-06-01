@@ -32,6 +32,8 @@ export type DeveloperCity = {
     leetcodeUrl: string;
     codechefUrl: string;
     hackerrankUrl: string;
+    repoSelectionMode: "all" | "selected";
+    selectedRepoIds: number[];
   } | null;
 };
 
